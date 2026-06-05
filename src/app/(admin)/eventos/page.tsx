@@ -183,7 +183,7 @@ export default function Eventos() {
                   >
                     {eventoAtivo === ev.id ? 'Fechar' : 'Ver fotos'}
                   </button>
-                  <button onClick={() => fileRef.current?.click()}
+                  <button
                     disabled={uploading}
                     className="text-white bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 disabled:opacity-60"
                     onClick={() => { setEventoAtivo(ev.id); fileRef.current?.click() }}>
