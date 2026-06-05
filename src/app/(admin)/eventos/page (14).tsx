@@ -237,7 +237,7 @@ export default function Eventos() {
             uploadFotos(eventoAtivo, e.target.files)
           }
           e.target.value = ''
-        }
+        }}
       />
     </div>
   )
