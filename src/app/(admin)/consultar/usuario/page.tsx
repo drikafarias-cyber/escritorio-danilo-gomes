@@ -1,310 +1,222 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useForm } from 'react-hook-form'
-import toast from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
-import { buscarCEP, formatarCEP, formatarCPF, formatarTelefone } from '@/lib/viacep'
+import { format } from 'date-fns'
+import toast from 'react-hot-toast'
+import { Search, MessageSquare, ExternalLink, Filter } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
-type FormData = {
+interface Usuario {
+  id: string
   nome: string
   cpf: string
-  rg: string
-  data_nascimento: string
-  titulo_eleitoral: string
   telefone: string
   whatsapp: string
-  cep: string
-  endereco: string
-  numero: string
-  complemento: string
-  bairro: string
+  data_nascimento: string
   cidade: string
   estado: string
-  enviar_wa: boolean
+  endereco: string
+  bairro: string
+  nome_assessor: string
+  created_at: string
 }
 
-export default function CadastrarUsuario() {
-  const [buscandoCEP, setBuscandoCEP] = useState(false)
-  const [salvando, setSalvando] = useState(false)
-  const [nomeAssessor, setNomeAssessor] = useState('')
-  const [userEmail, setUserEmail] = useState('')
+interface TipoAtendimento {
+  id: string
+  descricao: string
+}
 
-  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormData>({
-    defaultValues: { enviar_wa: true }
-  })
+export default function ConsultarUsuarios() {
+  const [busca, setBusca] = useState('')
+  const [tipoBusca, setTipoBusca] = useState<'nome' | 'cpf' | 'endereco' | 'tipo_atendimento'>('nome')
+  const [tipoSelecionado, setTipoSelecionado] = useState('')
+  const [tipos, setTipos] = useState<TipoAtendimento[]>([])
+  const [resultados, setResultados] = useState<Usuario[]>([])
+  const [buscando, setBuscando] = useState(false)
+  const [buscou, setBuscou] = useState(false)
+  const router = useRouter()
 
-  const cepValue = watch('cep')
-
-  // Pega o usuário logado
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        setUserEmail(data.user.email || '')
-        // Busca nome do assessor na tabela de atendentes pelo email
-        supabase.from('atendentes')
-          .select('nome')
-          .eq('email', data.user.email)
-          .single()
-          .then(({ data: atendente }) => {
-            if (atendente) setNomeAssessor(atendente.nome)
-            else setNomeAssessor(data.user?.email?.split('@')[0] || 'Sistema')
-          })
-      }
-    })
+    supabase.from('tipos_atendimento').select('id, descricao').eq('ativo', true).order('descricao')
+      .then(({ data }) => setTipos(data || []))
   }, [])
 
-  async function handleBuscarCEP() {
-    const cep = cepValue?.replace(/\D/g, '')
-    if (!cep || cep.length < 8) { toast.error('Digite um CEP válido'); return }
-    setBuscandoCEP(true)
-    const resultado = await buscarCEP(cep)
-    setBuscandoCEP(false)
-    if (!resultado.sucesso || !resultado.endereco) { toast.error(resultado.erro || 'CEP não encontrado'); return }
-    const { logradouro, bairro, localidade, uf } = resultado.endereco
-    setValue('endereco', logradouro)
-    setValue('bairro', bairro)
-    setValue('cidade', localidade)
-    setValue('estado', uf)
-    toast.success('Endereço preenchido automaticamente!')
-  }
+  async function buscar() {
+    setBuscando(true)
+    setBuscou(true)
 
-  function handleCPFChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const v = e.target.value.replace(/\D/g, '').slice(0, 11)
-    setValue('cpf', formatarCPF(v))
-  }
+    let query = supabase.from('usuarios').select('*').eq('ativo', true).limit(100)
 
-  function handleTelChange(field: 'telefone' | 'whatsapp', e: React.ChangeEvent<HTMLInputElement>) {
-    const v = e.target.value.replace(/\D/g, '').slice(0, 11)
-    setValue(field, formatarTelefone(v))
-  }
-
-  function handleCEPChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const v = e.target.value.replace(/\D/g, '').slice(0, 8)
-    setValue('cep', formatarCEP(v))
-  }
-
-  async function onSubmit(data: FormData) {
-    setSalvando(true)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
+    if (tipoBusca === 'nome' && busca.trim()) {
+      query = query.ilike('nome', `%${busca.trim()}%`)
+    } else if (tipoBusca === 'cpf' && busca.trim()) {
+      query = query.ilike('cpf', `%${busca.replace(/\D/g, '')}%`)
+    } else if (tipoBusca === 'endereco' && busca.trim()) {
+      query = query.or(`endereco.ilike.%${busca.trim()}%,bairro.ilike.%${busca.trim()}%,cidade.ilike.%${busca.trim()}%`)
+    } else if (tipoBusca === 'tipo_atendimento' && tipoSelecionado) {
+      // Busca por tipo de atendimento via subquery
+      const { data: atendsData } = await supabase
+        .from('atendimentos')
+        .select('usuario_id')
+        .eq('tipo_id', tipoSelecionado)
       
-      const { data: novoUsuario, error } = await supabase
-        .from('usuarios')
-        .insert({
-          nome: data.nome,
-          cpf: data.cpf.replace(/\D/g, ''),
-          rg: data.rg || null,
-          data_nascimento: data.data_nascimento || null,
-          titulo_eleitoral: data.titulo_eleitoral || null,
-          telefone: data.telefone || null,
-          whatsapp: data.whatsapp || null,
-          cep: data.cep?.replace(/\D/g, '') || null,
-          endereco: data.endereco || null,
-          numero: data.numero || null,
-          complemento: data.complemento || null,
-          bairro: data.bairro || null,
-          cidade: data.cidade || null,
-          estado: data.estado || null,
-          cadastrado_por: user?.id || null,
-          nome_assessor: nomeAssessor || null,
-        })
-        .select()
-        .single()
-
-      if (error) {
-        error.code === '23505'
-          ? toast.error('CPF já cadastrado no sistema!')
-          : toast.error(`Erro ao salvar: ${error.message}`)
-        setSalvando(false)
+      const ids = [...new Set((atendsData || []).map(a => a.usuario_id))]
+      if (ids.length === 0) {
+        setResultados([])
+        setBuscando(false)
         return
       }
-
-      toast.success(`${data.nome} cadastrado(a) com sucesso!`)
-
-      if (data.enviar_wa && (data.whatsapp || data.telefone)) {
-        const numero = data.whatsapp || data.telefone
-        const { data: config } = await supabase.from('configuracoes').select('valor').eq('chave', 'msg_boas_vindas').single()
-        const template = config?.valor || 'Olá {nome}! 🎉 Bem-vindo(a) à IECE Guarulhos!'
-
-        const res = await fetch('/api/notificacoes/whatsapp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            usuario_id: novoUsuario.id,
-            telefone: numero,
-            tipo: 'cadastro',
-            mensagem_template: template,
-            variaveis: { nome: data.nome.split(' ')[0] },
-          }),
-        })
-        const resultado = await res.json()
-        if (resultado.sucesso) toast.success('WhatsApp de boas-vindas enviado! 📱')
-      }
-
-      reset()
-    } catch {
-      toast.error('Erro inesperado. Tente novamente.')
+      query = query.in('id', ids)
     }
-    setSalvando(false)
+
+    const { data, error } = await query.order('nome')
+
+    if (error) {
+      toast.error('Erro ao buscar usuários')
+    } else {
+      setResultados(data || [])
+    }
+    setBuscando(false)
+  }
+
+  async function enviarMensagem(e: React.MouseEvent, usuario: Usuario) {
+    e.stopPropagation()
+    const numero = usuario.whatsapp || usuario.telefone
+    if (!numero) { toast.error('Usuário sem telefone cadastrado'); return }
+    const msg = prompt(`Mensagem para ${usuario.nome.split(' ')[0]}:`)
+    if (!msg) return
+    const res = await fetch('/api/notificacoes/whatsapp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario_id: usuario.id, telefone: numero, tipo: 'manual', mensagem_template: msg, variaveis: {} }),
+    })
+    const r = await res.json()
+    r.sucesso ? toast.success('Mensagem enviada!') : toast.error(`Erro: ${r.erro}`)
+  }
+
+  function formatarCPF(cpf: string) {
+    return cpf?.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
   }
 
   return (
-    <div className="max-w-3xl">
-      {/* Info do assessor logado */}
-      {nomeAssessor && (
-        <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-5 flex items-center gap-3">
-          <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-            {nomeAssessor.charAt(0)}
-          </div>
-          <div>
-            <p className="text-sm font-medium text-orange-800">Cadastrando como: <strong>{nomeAssessor}</strong></p>
-            <p className="text-xs text-orange-600">{userEmail} · {new Date().toLocaleString('pt-BR')}</p>
-          </div>
+    <div className="max-w-5xl">
+      {/* Filtros de busca */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+        {/* Tipo de busca */}
+        <div className="flex gap-2 mb-4">
+          {[
+            { key: 'nome', label: '👤 Nome' },
+            { key: 'cpf', label: '🪪 CPF' },
+            { key: 'endereco', label: '📍 Endereço' },
+            { key: 'tipo_atendimento', label: '📋 Tipo de atendimento' },
+          ].map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTipoBusca(t.key as typeof tipoBusca)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                tipoBusca === t.key
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Campo de busca */}
+        <div className="flex gap-3">
+          {tipoBusca === 'tipo_atendimento' ? (
+            <select
+              value={tipoSelecionado}
+              onChange={e => setTipoSelecionado(e.target.value)}
+              className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+            >
+              <option value="">Selecione o tipo de atendimento...</option>
+              {tipos.map(t => <option key={t.id} value={t.id}>{t.descricao}</option>)}
+            </select>
+          ) : (
+            <input
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && buscar()}
+              className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              placeholder={
+                tipoBusca === 'nome' ? 'Digite o nome...' :
+                tipoBusca === 'cpf' ? 'Digite o CPF...' :
+                'Digite rua, bairro ou cidade...'
+              }
+            />
+          )}
+          <button
+            onClick={buscar}
+            disabled={buscando}
+            className="bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-60"
+          >
+            <Search size={16} />
+            {buscando ? 'Buscando...' : 'Buscar'}
+          </button>
+        </div>
+      </div>
+
+      {/* Resultados */}
+      {buscou && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {resultados.length === 0 ? (
+            <p className="text-center text-gray-400 py-12">Nenhum usuário encontrado</p>
+          ) : (
+            <>
+              <div className="px-5 py-3 border-b border-gray-100 text-xs text-gray-400">
+                {resultados.length} resultado(s) — clique para ver o cadastro completo
+              </div>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Nome</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">CPF</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Nascimento</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Telefone</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Cidade</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Assessor</th>
+                    <th className="px-5 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resultados.map((u) => (
+                    <tr
+                      key={u.id}
+                      className="border-b border-gray-50 hover:bg-orange-50 cursor-pointer"
+                      onClick={() => router.push(`/consultar/usuario/${u.id}`)}
+                    >
+                      <td className="px-5 py-3 text-sm font-medium text-gray-800">
+                        <div className="flex items-center gap-1">{u.nome} <ExternalLink size={12} className="text-gray-300" /></div>
+                      </td>
+                      <td className="px-5 py-3 text-sm text-gray-500">{formatarCPF(u.cpf)}</td>
+                      <td className="px-5 py-3 text-sm text-gray-500">
+                        {u.data_nascimento ? format(new Date(u.data_nascimento + 'T00:00:00'), 'dd/MM/yyyy') : '-'}
+                      </td>
+                      <td className="px-5 py-3 text-sm text-gray-500">{u.telefone || u.whatsapp || '-'}</td>
+                      <td className="px-5 py-3 text-sm text-gray-500">{u.cidade ? `${u.cidade}/${u.estado}` : '-'}</td>
+                      <td className="px-5 py-3 text-sm text-gray-400">{u.nome_assessor || '-'}</td>
+                      <td className="px-5 py-3">
+                        {(u.whatsapp || u.telefone) && (
+                          <button
+                            onClick={(e) => enviarMensagem(e, u)}
+                            className="flex items-center gap-1 bg-green-500 hover:bg-green-600 text-white text-xs px-3 py-1.5 rounded-lg"
+                          >
+                            <MessageSquare size={13} /> WA
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
         </div>
       )}
-
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-        {/* Dados pessoais */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Dados pessoais</h2>
-          <div className="mb-4">
-            <label className="block text-sm text-gray-600 mb-1">Nome completo *</label>
-            <input {...register('nome', { required: 'Nome é obrigatório' })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-              placeholder="Nome completo" />
-            {errors.nome && <p className="text-red-500 text-xs mt-1">{errors.nome.message}</p>}
-          </div>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">CPF *</label>
-              <input {...register('cpf', { required: 'CPF é obrigatório' })} onChange={handleCPFChange}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                placeholder="000.000.000-00" maxLength={14} />
-              {errors.cpf && <p className="text-red-500 text-xs mt-1">{errors.cpf.message}</p>}
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">RG</label>
-              <input {...register('rg')}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                placeholder="00.000.000-0" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Data de nascimento</label>
-              <input type="date" {...register('data_nascimento')}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Título eleitoral</label>
-              <input {...register('titulo_eleitoral')}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                placeholder="Nr título eleitoral" />
-            </div>
-          </div>
-        </div>
-
-        {/* Endereço */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Endereço</h2>
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4 text-xs text-orange-700">
-            📍 Digite o CEP e clique em <strong>Buscar</strong> para preencher automaticamente
-          </div>
-          <div className="flex gap-3 mb-4">
-            <div className="flex-1">
-              <label className="block text-sm text-gray-600 mb-1">CEP</label>
-              <input {...register('cep')} onChange={handleCEPChange}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                placeholder="00000-000" maxLength={9} />
-            </div>
-            <div className="flex items-end">
-              <button type="button" onClick={handleBuscarCEP} disabled={buscandoCEP}
-                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-60">
-                {buscandoCEP ? 'Buscando...' : '🔍 Buscar'}
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4 mb-4">
-            <div className="col-span-2">
-              <label className="block text-sm text-gray-600 mb-1">Endereço</label>
-              <input {...register('endereco')}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                placeholder="Rua/Avenida..." />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Número</label>
-              <input {...register('numero')}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                placeholder="Nr" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Complemento</label>
-              <input {...register('complemento')}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                placeholder="Apto/Casa" />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Bairro</label>
-              <input {...register('bairro')}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                placeholder="Bairro" />
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2">
-              <label className="block text-sm text-gray-600 mb-1">Cidade</label>
-              <input {...register('cidade')}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                placeholder="Cidade" />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Estado</label>
-              <input {...register('estado')}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                placeholder="SP" maxLength={2} />
-            </div>
-          </div>
-        </div>
-
-        {/* Contato */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Contato</h2>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Telefone</label>
-              <input {...register('telefone')} onChange={e => handleTelChange('telefone', e)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                placeholder="(11) 0000-0000" />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">WhatsApp</label>
-              <input {...register('whatsapp')} onChange={e => handleTelChange('whatsapp', e)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                placeholder="(11) 99999-9999" />
-            </div>
-          </div>
-          <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
-            <input type="checkbox" id="enviar_wa" {...register('enviar_wa')} className="w-4 h-4 accent-green-600" />
-            <label htmlFor="enviar_wa" className="text-sm text-green-800 cursor-pointer">
-              📱 Enviar mensagem de boas-vindas via WhatsApp ao cadastrar
-            </label>
-          </div>
-        </div>
-
-        <div className="flex gap-3">
-          <button type="submit" disabled={salvando}
-            className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium disabled:opacity-60">
-            {salvando ? '⏳ Salvando...' : '💾 Salvar cadastro'}
-          </button>
-          <button type="button" onClick={() => reset()}
-            className="border border-gray-300 text-gray-600 px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50">
-            Limpar
-          </button>
-        </div>
-      </form>
     </div>
   )
 }
