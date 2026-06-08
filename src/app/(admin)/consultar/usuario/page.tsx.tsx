@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
-import { Search, MessageSquare } from 'lucide-react'
+import { Search, MessageSquare, ExternalLink } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface Usuario {
   id: string
@@ -23,6 +24,7 @@ export default function ConsultarUsuarios() {
   const [resultados, setResultados] = useState<Usuario[]>([])
   const [buscando, setBuscando] = useState(false)
   const [buscou, setBuscou] = useState(false)
+  const router = useRouter()
 
   async function buscar() {
     if (!busca.trim()) return
@@ -30,8 +32,8 @@ export default function ConsultarUsuarios() {
     setBuscou(true)
 
     const termo = busca.replace(/\D/g, '').length > 5
-      ? busca.replace(/\D/g, '') // CPF
-      : busca.trim() // Nome
+      ? busca.replace(/\D/g, '')
+      : busca.trim()
 
     let query = supabase.from('usuarios').select('*').eq('ativo', true).limit(50)
 
@@ -51,7 +53,8 @@ export default function ConsultarUsuarios() {
     setBuscando(false)
   }
 
-  async function enviarMensagem(usuario: Usuario) {
+  async function enviarMensagem(e: React.MouseEvent, usuario: Usuario) {
+    e.stopPropagation()
     const numero = usuario.whatsapp || usuario.telefone
     if (!numero) { toast.error('Usuário sem telefone cadastrado'); return }
 
@@ -79,7 +82,6 @@ export default function ConsultarUsuarios() {
 
   return (
     <div className="max-w-5xl">
-      {/* Busca */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
         <div className="flex gap-3">
           <input
@@ -100,7 +102,6 @@ export default function ConsultarUsuarios() {
         </div>
       </div>
 
-      {/* Resultados */}
       {buscou && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {resultados.length === 0 ? (
@@ -108,7 +109,7 @@ export default function ConsultarUsuarios() {
           ) : (
             <>
               <div className="px-5 py-3 border-b border-gray-100 text-xs text-gray-400">
-                {resultados.length} resultado(s)
+                {resultados.length} resultado(s) — clique em um nome para ver o cadastro completo
               </div>
               <table className="w-full">
                 <thead>
@@ -123,8 +124,15 @@ export default function ConsultarUsuarios() {
                 </thead>
                 <tbody>
                   {resultados.map((u) => (
-                    <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">
-                      <td className="px-5 py-3 text-sm font-medium text-gray-800">{u.nome}</td>
+                    <tr
+                      key={u.id}
+                      className="border-b border-gray-50 hover:bg-orange-50 cursor-pointer"
+                      onClick={() => router.push(`/consultar/usuario/${u.id}`)}
+                    >
+                      <td className="px-5 py-3 text-sm font-medium text-gray-800 flex items-center gap-2">
+                        {u.nome}
+                        <ExternalLink size={12} className="text-gray-300" />
+                      </td>
                       <td className="px-5 py-3 text-sm text-gray-500">{formatarCPF(u.cpf)}</td>
                       <td className="px-5 py-3 text-sm text-gray-500">
                         {u.data_nascimento ? format(new Date(u.data_nascimento + 'T00:00:00'), 'dd/MM/yyyy') : '-'}
@@ -134,7 +142,7 @@ export default function ConsultarUsuarios() {
                       <td className="px-5 py-3">
                         {(u.whatsapp || u.telefone) && (
                           <button
-                            onClick={() => enviarMensagem(u)}
+                            onClick={(e) => enviarMensagem(e, u)}
                             className="flex items-center gap-1 bg-green-500 hover:bg-green-600 text-white text-xs px-3 py-1.5 rounded-lg"
                           >
                             <MessageSquare size={13} /> WA
