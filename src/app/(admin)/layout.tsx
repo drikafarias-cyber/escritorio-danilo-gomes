@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Toaster } from 'react-hot-toast'
+import { supabase } from '@/lib/supabase'
 import {
   Home, Users, UserPlus, Tag, BadgeCheck,
-  Search, List, Image, MessageSquare, LogOut, Menu, X
+  Search, List, Image, MessageSquare, LogOut, Menu, X, ShieldCheck
 } from 'lucide-react'
 
 const navItems = [
@@ -20,6 +21,8 @@ const navItems = [
   { section: 'Consultas' },
   { label: 'Usuários', href: '/consultar/usuario', icon: Search },
   { label: 'Atendimentos', href: '/consultar/atendimentos', icon: List },
+  { section: 'Administração' },
+  { label: 'Aprovação de Acessos', href: '/aprovacao', icon: ShieldCheck },
   { section: 'Outros' },
   { label: 'Notificações WhatsApp', href: '/notificacoes', icon: MessageSquare },
   { label: 'Fotos de Eventos', href: '/eventos', icon: Image },
@@ -27,11 +30,36 @@ const navItems = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [nomeUsuario, setNomeUsuario] = useState('AD')
+  const [iniciais, setIniciais] = useState('AD')
 
-  // Titulo da página baseado na rota atual
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) {
+        router.push('/auth/login')
+        return
+      }
+      const email = data.user.email || ''
+      const nome = data.user.user_metadata?.nome || email.split('@')[0] || 'Admin'
+      setNomeUsuario(nome)
+      const partes = nome.split(' ')
+      if (partes.length >= 2) {
+        setIniciais((partes[0][0] + partes[partes.length - 1][0]).toUpperCase())
+      } else {
+        setIniciais(nome.slice(0, 2).toUpperCase())
+      }
+    })
+  }, [])
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push('/auth/login')
+  }
+
   const currentNav = navItems.find(n => 'href' in n && n.href === pathname)
-  const pageTitle = 'label' in (currentNav || {}) ? (currentNav as { label: string }).label : 'Sistema IECE'
+  const pageTitle = 'label' in (currentNav || {}) ? (currentNav as { label: string }).label : 'Escritório Danilo Gomes'
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -83,15 +111,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           })}
         </nav>
 
-        {/* Sair */}
-        <div className="border-t border-gray-200 p-3">
-          <Link
-            href="/auth/login"
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+        {/* Usuário logado + Sair */}
+        <div className="border-t border-gray-200 p-3 space-y-1">
+          {sidebarOpen && (
+            <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
+              <div className="w-7 h-7 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                {iniciais}
+              </div>
+              <p className="text-xs text-gray-600 truncate">{nomeUsuario}</p>
+            </div>
+          )}
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700 w-full"
           >
             <LogOut size={16} />
             {sidebarOpen && 'Sair'}
-          </Link>
+          </button>
         </div>
       </aside>
 
@@ -100,17 +136,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Topbar */}
         <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-5 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="text-gray-400 hover:text-gray-600"
-            >
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-400 hover:text-gray-600">
               {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
             <h1 className="text-base font-semibold text-gray-800">{pageTitle}</h1>
           </div>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
-              AD
+              {iniciais}
             </div>
           </div>
         </header>
