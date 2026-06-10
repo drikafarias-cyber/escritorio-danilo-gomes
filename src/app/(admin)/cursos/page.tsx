@@ -33,7 +33,6 @@ export default function CursosPage() {
     vagas_total: 0, faixa_etaria_min: 0, faixa_etaria_max: 99,
     permite_adultos: false, data_inicio: '', data_fim: ''
   })
-  const router = useRouter()
 
   useEffect(() => { carregar() }, [])
 
@@ -157,14 +156,14 @@ export default function CursosPage() {
                 <p className="text-xs text-gray-500 flex items-center gap-1.5"><Users size={12} /> {c.vagas_total - c.vagas_disponiveis}/{c.vagas_total} inscritos · {c.faixa_etaria_min}-{c.faixa_etaria_max} anos</p>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => router.push(`/cursos/${c.id}`)}
+                <a href={`/cursos/${c.id}`}
                   className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1">
                   <BookOpen size={13} /> Gerenciar
-                </button>
-                <button onClick={() => router.push(`/cursos/${c.id}/presenca`)}
+                </a>
+                <a href={`/cursos/${c.id}/presenca`}
                   className="flex-1 border border-gray-300 text-gray-600 hover:bg-gray-50 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1">
                   <Users size={13} /> Presença
-                </button>
+                </a>
               </div>
             </div>
           ))}
