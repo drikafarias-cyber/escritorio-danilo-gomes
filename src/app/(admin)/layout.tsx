@@ -7,7 +7,8 @@ import { Toaster } from 'react-hot-toast'
 import { supabase } from '@/lib/supabase'
 import {
   Home, Users, UserPlus, Tag, BadgeCheck,
-  Search, List, Image, MessageSquare, LogOut, Menu, X, ShieldCheck
+  Search, List, Image, MessageSquare, LogOut, Menu, X,
+  ShieldCheck, BookOpen, Baby
 } from 'lucide-react'
 
 const navItems = [
@@ -16,11 +17,14 @@ const navItems = [
   { label: 'Novo Atendimento', href: '/atendimento', icon: Users },
   { section: 'Cadastros' },
   { label: 'Usuário', href: '/cadastrar/usuario', icon: UserPlus },
+  { label: 'Dependentes', href: '/cadastrar/dependentes', icon: Baby },
   { label: 'Tipo de Atendimento', href: '/cadastrar/tipo-atendimento', icon: Tag },
   { label: 'Atendentes', href: '/cadastrar/atendente', icon: BadgeCheck },
   { section: 'Consultas' },
   { label: 'Usuários', href: '/consultar/usuario', icon: Search },
   { label: 'Atendimentos', href: '/consultar/atendimentos', icon: List },
+  { section: 'Cursos' },
+  { label: 'Gerenciar Cursos', href: '/cursos', icon: BookOpen },
   { section: 'Administração' },
   { label: 'Aprovação de Acessos', href: '/aprovacao', icon: ShieldCheck },
   { section: 'Outros' },
@@ -32,8 +36,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname()
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [nomeUsuario, setNomeUsuario] = useState('AD')
-  const [iniciais, setIniciais] = useState('AD')
+  const [nomeUsuario, setNomeUsuario] = useState('')
+  const [iniciais, setIniciais] = useState('DG')
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -91,7 +95,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               ) : <div key={i} className="my-1 mx-3 border-t border-gray-100" />
             }
 
-            const isActive = pathname === item.href
+            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
             const Icon = item.icon!
 
             return (
@@ -113,7 +117,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Usuário logado + Sair */}
         <div className="border-t border-gray-200 p-3 space-y-1">
-          {sidebarOpen && (
+          {sidebarOpen && nomeUsuario && (
             <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
               <div className="w-7 h-7 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                 {iniciais}
